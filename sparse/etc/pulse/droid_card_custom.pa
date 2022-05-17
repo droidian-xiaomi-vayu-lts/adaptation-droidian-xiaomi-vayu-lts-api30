@@ -1,0 +1,2 @@
+load-module module-droid-card-30 rate=48000 voice_virtual_stream=true
+load-module module-droid-hidl-30
