@@ -1,0 +1,19 @@
+Source: adaptation-droidian-xiaomi-vayu-lts-api30
+Maintainer: berbascum <berbascum@ticv.cat>
+Section: metapackages
+Priority: optional
+Build-Depends: debhelper (>= 10),
+               debhelper-compat (= 13),
+Standards-Version: 4.5.0.3
+
+Package: adaptation-droidian-xiaomi-vayu-lts-api30
+Architecture: arm64
+Depends: ${misc:Depends},
+         adaptation-hybris-api30-phone,
+         adaptation-droidian-xiaomi-vayu-lts-api30-configs (= ${binary:Version}),
+Description: Community adaptation for xiaomi-vayu LTS api30 - metapackage
+
+Package: adaptation-droidian-xiaomi-vayu-lts-api30-configs
+Architecture: arm64
+Depends: ${misc:Depends},
+Description: Community adaptation for xiaomi-vayu LTS api30 - adaptation configurations
