@@ -1,2 +1,5 @@
 load-module module-droid-card-30 rate=48000 voice_virtual_stream=true
 load-module module-droid-hidl-30
+
+## Select built-in mic from the primary input
+set-source-port source.primary_input input-builtin_mic
