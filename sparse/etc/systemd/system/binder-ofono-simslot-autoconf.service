@@ -1,0 +1,12 @@
+[Unit]
+Description=single-sim auto selection for qcom xiaomi vayu
+After=ModemManager.service
+Wants=ModemManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/binder-ofono-simslot-autoconf.sh
+#RemainAfterExit=yes
+
+[Install]
+WantedBy=graphical.target

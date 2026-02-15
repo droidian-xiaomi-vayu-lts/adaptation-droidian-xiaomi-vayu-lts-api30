@@ -13,6 +13,8 @@ Depends: ${misc:Depends},
          adaptation-droidian-xiaomi-vayu-lts-api30-configs (= ${binary:Version}),
          linux-image-halium11-l4v3nx-xiaomi-vayu
          linux-bootimage-halium11-l4v3nx-xiaomi-vayu
+         qrtr-tools,
+         libqmi-utils,
 Description: Community adaptation for xiaomi-vayu LTS api30 - metapackage
 
 Package: adaptation-droidian-xiaomi-vayu-lts-api30-configs
