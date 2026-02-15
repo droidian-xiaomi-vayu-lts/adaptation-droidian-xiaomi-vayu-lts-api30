@@ -11,6 +11,8 @@ Architecture: arm64
 Depends: ${misc:Depends},
          adaptation-hybris-api30-phone,
          adaptation-droidian-xiaomi-vayu-lts-api30-configs (= ${binary:Version}),
+         linux-image-halium11-l4v3nx-xiaomi-vayu
+         linux-bootimage-halium11-l4v3nx-xiaomi-vayu
 Description: Community adaptation for xiaomi-vayu LTS api30 - metapackage
 
 Package: adaptation-droidian-xiaomi-vayu-lts-api30-configs
