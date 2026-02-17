@@ -2,6 +2,10 @@ name: Build Package
 
 on:
   push:
+    branches-ignore:
+      - '**'
+    tags:
+      - '**'
   workflow_dispatch:
 
 jobs:
