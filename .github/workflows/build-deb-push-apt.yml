@@ -1,0 +1,67 @@
+name: Build Package
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  debian-build:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        suite: ["next"]
+        architecture: ["arm64"]
+    env:
+      FULL_BUILD: "yes"
+      EXTRA_REPOS: ""
+      HOST_ARCH: "arm64"
+      PAT: ${{ secrets.PAT }}
+    steps:
+      - name: Set up environment
+        run: mkdir -p /tmp/buildd-results
+
+      - name: Clone sources
+        run: |
+            git clone -b "$GITHUB_REF_NAME" "https://github.com/${{ github.repository }}.git" sources
+            cd sources
+            if [ "${{ github.event_name }}" == "push" ] && [ -n "${{ github.ref }}" ]; then
+              git fetch --tags
+              git checkout "${{ github.ref_name }}"
+            fi
+
+      - name: Extract package name
+        run: |
+            cd sources
+            echo "PKG_NAME=$(grep '^Package:' debian/control | awk '{print $2}' | paste -sd " ")" >> $GITHUB_ENV
+
+      - name: Run Docker build
+        run: |
+            docker run \
+              --rm \
+              -e GITHUB_REF_NAME="$GITHUB_REF_NAME" \
+              -e GITHUB_SHA="$GITHUB_SHA" \
+              -e EXTRA_REPOS="$EXTRA_REPOS" \
+              -e RELENG_FULL_BUILD="$FULL_BUILD" \
+              -e RELENG_HOST_ARCH="$HOST_ARCH" \
+              -v /tmp/buildd-results:/buildd \
+              -v ${PWD}/sources:/buildd/sources \
+              --cap-add=SYS_ADMIN \
+              --security-opt apparmor:unconfined \
+              --security-opt seccomp=unconfined \
+              quay.io/droidian/build-essential:next-arm64 \
+              /bin/sh -c "cd /buildd/sources ; releng-build-package"
+
+      - name: Configure Git
+        run: |
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Push built packages to apt repository
+        run: |
+            git clone https://$PAT@github.com/WHO53/apt.git --depth=1
+            cd apt/packages
+            rm -f $(echo $PKG_NAME | sed 's/\([^ ]*\)/\1*/g')
+            cp /tmp/buildd-results/*.deb .
+            git add -A
+            git commit -m "GitHub Actions: ${{ github.repository }}:${GITHUB_SHA::7}"
+            git push origin main
