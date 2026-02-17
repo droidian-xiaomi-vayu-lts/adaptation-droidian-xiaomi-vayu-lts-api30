@@ -52,7 +52,7 @@ jobs:
               --cap-add=SYS_ADMIN \
               --security-opt apparmor:unconfined \
               --security-opt seccomp=unconfined \
-              quay.io/droidian/build-essential:next-arm64 \
+              quay.io/droidian/build-essential:${{ matrix.suite }}-${{ matrix.architecture }} \
               /bin/sh -c "cd /buildd/sources ; releng-build-package"
 
       - name: Configure Git
