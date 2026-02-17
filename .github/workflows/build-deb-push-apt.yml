@@ -19,7 +19,7 @@ jobs:
       FULL_BUILD: "yes"
       EXTRA_REPOS: ""
       HOST_ARCH: "arm64"
-      PAT: ${{ secrets.PAT }}
+      PAT: ${{ secrets.PAT_APT_REPO }}
     steps:
       - name: Set up environment
         run: mkdir -p /tmp/buildd-results
