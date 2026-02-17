@@ -28,7 +28,7 @@ jobs:
         run: |
             git clone -b "$GITHUB_REF_NAME" "https://github.com/${{ github.repository }}.git" sources
             cd sources
-            if [ "${{ github.event_name }}" == "push" ] && [ -n "${{ github.ref }}" ]; then
+            if [ "${{ github.event_name }}" == "push" ] && [ -n "${{ github.ref }}" ] && [ ${{ github.ref_type != 'tag' }} ]; then
               git fetch --tags
               git checkout "${{ github.ref_name }}"
             fi
