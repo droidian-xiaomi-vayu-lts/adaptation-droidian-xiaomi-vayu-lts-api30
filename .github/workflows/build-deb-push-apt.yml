@@ -19,7 +19,10 @@ jobs:
       FULL_BUILD: "yes"
       EXTRA_REPOS: ""
       HOST_ARCH: "arm64"
-      PAT: ${{ secrets.PAT_APT_REPO }}
+    outputs:
+      artifact-name: ${{ steps.upload-debs.outputs.artifact-name }}
+      pkg-name: ${{ steps.pkg-name.outputs.pkg-name }}
+      github-sha-short: ${{ steps.output-vars.outputs.github-sha-short }}
     steps:
       - name: Set up environment
         run: mkdir -p /tmp/buildd-results
@@ -34,9 +37,18 @@ jobs:
             fi
 
       - name: Extract package name
+        id: pkg-name
         run: |
             cd sources
-            echo "PKG_NAME=$(grep '^Package:' debian/control | awk '{print $2}' | paste -sd " ")" >> $GITHUB_ENV
+            PKG_NAME=$(grep '^Package:' debian/control | awk '{print $2}' | paste -sd " ")
+            echo "${PKG_NAME}"
+            echo "PKG_NAME=${PKG_NAME}" >> $GITHUB_ENV
+            echo "pkg-name=${PKG_NAME}" >> $GITHUB_OUTPUT
+      - name: Export github-sha
+        id: output-vars
+        run: |
+          echo "GITHUB_SHA = ${GITHUB_SHA}"
+          echo "github-sha-short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
       - name: Run Docker build
         run: |
@@ -55,17 +67,50 @@ jobs:
               quay.io/droidian/build-essential:${{ matrix.suite }}-${{ matrix.architecture }} \
               /bin/sh -c "cd /buildd/sources ; releng-build-package"
 
+      - name: Upload deb artifacts
+        id: upload-debs
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-packages-${{ github.run_id }}
+          path: /tmp/buildd-results/*.deb
+          if-no-files-found: error
+          retention-days: 1
+
+  apt-push:
+    needs: debian-build
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/berbascum/berb-debian-devel-build-essential:trixie-slim-amd64
+    env:
+      PKG_NAME: ${{ needs.debian-build.outputs.pkg-name }}
+      GITHUB_SHA_SHORT: ${{ needs.debian-build.outputs.github-sha-short }}
+      PAT: ${{ secrets.PAT_APT_REPO }}
+      GH_APT_OWNER: "droidian-xiaomi-vayu-lts"
+      GH_APT_REPO: "apt-repo-vayu-lts"
+      GH_APT_REPO_POOL_DIR: "pool/current/main/binary-arm64"
+    steps:
+      - name: Download .deb artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.debian-build.outputs.artifact-name }}
+          path: /tmp/buildd-results
+
+      - name: Check downloaded artifacts
+        run: |
+          echo "Next line ls of /tmp/buildd-results"
+          ls -la /tmp/buildd-results/deb-packages*
+
       - name: Configure Git
         run: |
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Push built packages to apt repository
         run: |
-            git clone https://$PAT@github.com/WHO53/apt.git --depth=1
-            cd apt/packages
-            rm -f $(echo $PKG_NAME | sed 's/\([^ ]*\)/\1*/g')
-            cp /tmp/buildd-results/*.deb .
-            git add -A
-            git commit -m "GitHub Actions: ${{ github.repository }}:${GITHUB_SHA::7}"
-            git push origin main
+          git clone https://$PAT@github.com/${GH_APT_OWNER}/${GH_APT_REPO}.git --depth=1
+          cd ${GH_APT_REPO}
+          rm -vf ${GH_APT_REPO_POOL_DIR}/$(echo $PKG_NAME | sed 's/\([^ ]*\)/\1*/g')
+          cp -v /tmp/buildd-results/deb-packages*/*.deb ${GH_APT_REPO_POOL_DIR}/
+          git add -A
+          git commit -m "GitHub Actions: ${{ github.repository }}:${GITHUB_SHA_SHORT}"
+          git push origin main
