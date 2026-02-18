@@ -100,17 +100,52 @@ jobs:
           echo "Next line ls of /tmp/buildd-results"
           ls -la /tmp/buildd-results/deb-packages*
 
-      - name: Configure Git
+      - name: Import GPG key and setup gpg
+        env:
+          GPG_TTY: $(tty)
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_APT_SIGN_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_APT_SIGN_PASSPHRASE }}
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          echo "$GPG_PRIVATE_KEY" | gpg --import --batch
+          echo "allow-preset-passphrase" > ~/.gnupg/gpg-agent.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          echo "no-tty" >> ~/.gnupg/gpg.conf
+          gpg-connect-agent reloadagent /bye
+
+      - name: Configure Git
+        shell: bash
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_APT_SIGN_KEY_ID }}
+          GH_OWNER: ${{github.repository_owner}}
+          GH_EMAIL: du.vayults@ticv.cat
+        run: |
+          git config --global user.name "GH Action: ${GH_OWNER}"
+          git config --global user.email "${GH_EMAIL}"
+          git config --global commit.gpgSign true
+          git config --global user.signingkey "${GPG_KEY_ID}"
+          git config --global gpg.program "$(which gpg)"
 
       - name: Push built packages to apt repository
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_APT_SIGN_KEY_ID }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_APT_SIGN_PASSPHRASE }}
         run: |
+          # FIX commit gpg: Needs first a gpg command
+          # with the sign key passing the passphrase
+          # unlocking the keyring to get git commit
+          # working.
+          echo "Sign test" > test.txt
+          echo "${GPG_PASSPHRASE}" | \
+            gpg --batch --yes \
+            --pinentry-mode loopback \
+            --passphrase-fd 0 \
+            --local-user ${GPG_KEY_ID} \
+            --output test.txt.sig \
+            --sign test.txt
           git clone https://$PAT@github.com/${GH_APT_OWNER}/${GH_APT_REPO}.git --depth=1
           cd ${GH_APT_REPO}
           rm -vf ${GH_APT_REPO_POOL_DIR}/$(echo $PKG_NAME | sed 's/\([^ ]*\)/\1*/g')
           cp -v /tmp/buildd-results/deb-packages*/*.deb ${GH_APT_REPO_POOL_DIR}/
           git add -A
-          git commit -m "GitHub Actions: ${{ github.repository }}:${GITHUB_SHA_SHORT}"
+          git commit -S -m "GitHub Actions: (current) main: update package(s)" -m "${PKG_NAME}" -m "${{ github.repository }}:${GITHUB_SHA_SHORT}"
           git push origin main
