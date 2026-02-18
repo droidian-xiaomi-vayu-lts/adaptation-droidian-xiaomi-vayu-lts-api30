@@ -1,0 +1,109 @@
+name: Build Package
+
+on:
+  push:
+    branches-ignore:
+      - '**'
+    tags:
+      - '**'
+  workflow_dispatch:
+
+jobs:
+  debian-build:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      matrix:
+        suite: ["next"]
+        architecture: ["arm64"]
+    env:
+      FULL_BUILD: "yes"
+      EXTRA_REPOS: ""
+      HOST_ARCH: "arm64"
+      PAT: ${{ secrets.PAT_APT_REPO }}
+      GH_OWNER: ${{github.repository_owner}}
+      GH_EMAIL: du.vayults@ticv.cat
+      GH_APT_OWNER: "droidian-xiaomi-vayu-lts"
+      GH_APT_REPO: "apt-repo-vayu-lts"
+      GH_APT_REPO_POOL_DIR: "pool/current/main/binary-arm64"
+    steps:
+      - name: Set up environment
+        run: mkdir -p /tmp/buildd-results
+
+      - name: Clone sources
+        run: |
+            git clone -b "$GITHUB_REF_NAME" "https://github.com/${{ github.repository }}.git" sources
+            cd sources
+            if [ "${{ github.event_name }}" == "push" ] && [ -n "${{ github.ref }}" ] && [ ${{ github.ref_type != 'tag' }} ]; then
+              git fetch --tags
+              git checkout "${{ github.ref_name }}"
+            fi
+
+      - name: Extract package name
+        run: |
+            cd sources
+            echo "PKG_NAME=$(grep '^Package:' debian/control | awk '{print $2}' | paste -sd " ")" >> $GITHUB_ENV
+
+      - name: Run Docker build
+        run: |
+            docker run \
+              --rm \
+              -e GITHUB_REF_NAME="$GITHUB_REF_NAME" \
+              -e GITHUB_SHA="$GITHUB_SHA" \
+              -e EXTRA_REPOS="$EXTRA_REPOS" \
+              -e RELENG_FULL_BUILD="$FULL_BUILD" \
+              -e RELENG_HOST_ARCH="$HOST_ARCH" \
+              -v /tmp/buildd-results:/buildd \
+              -v ${PWD}/sources:/buildd/sources \
+              --cap-add=SYS_ADMIN \
+              --security-opt apparmor:unconfined \
+              --security-opt seccomp=unconfined \
+              quay.io/droidian/build-essential:${{ matrix.suite }}-${{ matrix.architecture }} \
+              /bin/sh -c "cd /buildd/sources ; releng-build-package"
+
+      - name: Import GPG key and setup gpg
+        env:
+          GPG_TTY: $(tty)
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_APT_SIGN_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_APT_SIGN_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --import --batch
+          echo "allow-preset-passphrase" > ~/.gnupg/gpg-agent.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          echo "no-tty" >> ~/.gnupg/gpg.conf
+          gpg-connect-agent reloadagent /bye
+
+      - name: Configure Git
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_APT_SIGN_KEY_ID }}
+        run: |
+          git config --global user.name "GH Action: ${GH_OWNER}"
+          git config --global user.email "${GH_EMAIL}"
+          git config --global commit.gpgSign true
+          git config --global user.signingkey "${GPG_KEY_ID}"
+          git config --global gpg.program "$(which gpg)"
+
+      - name: Push built packages to apt repository
+        env:
+          GPG_KEY_ID: ${{ secrets.GPG_APT_SIGN_KEY_ID }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_APT_SIGN_PASSPHRASE }}
+        run: |
+          # FIX commit gpg: Needs first a gpg command
+          # with the sign key passing the passphrase
+          # unlocking the keyring to get git commit
+          # working.
+          echo "Sign test" > test.txt
+          echo "${GPG_PASSPHRASE}" | \
+            gpg --batch --yes \
+            --pinentry-mode loopback \
+            --passphrase-fd 0 \
+            --local-user ${GPG_KEY_ID} \
+            --output test.txt.sig \
+            --sign test.txt
+          # Clone gh apt repo
+          git clone https://$PAT@github.com/${GH_APT_OWNER}/${GH_APT_REPO}.git --depth=1
+          cd ${GH_APT_REPO}
+          rm -vf ${GH_APT_REPO_POOL_DIR}/$(echo $PKG_NAME | sed 's/\([^ ]*\)/\1*/g')
+          cp -v /tmp/buildd-results/*.deb ${GH_APT_REPO_POOL_DIR}/
+          git add -A
+          git commit -S -m "GitHub Actions: (current) main: update package(s)" -m "${PKG_NAME}" -m "${{ github.repository }}:${GITHUB_SHA::7}"
+          git push origin main
