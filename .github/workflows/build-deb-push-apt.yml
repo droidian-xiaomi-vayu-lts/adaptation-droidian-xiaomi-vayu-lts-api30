@@ -20,6 +20,11 @@ jobs:
       EXTRA_REPOS: ""
       HOST_ARCH: "arm64"
       PAT: ${{ secrets.PAT_APT_REPO }}
+      GH_OWNER: ${{github.repository_owner}}
+      GH_EMAIL: du.vayults@ticv.cat
+      GH_APT_OWNER: "droidian-xiaomi-vayu-lts"
+      GH_APT_REPO: "apt-repo-vayu-lts"
+      GH_APT_REPO_POOL_DIR: "pool/current/main/binary-arm64"
     steps:
       - name: Set up environment
         run: mkdir -p /tmp/buildd-results
@@ -57,15 +62,15 @@ jobs:
 
       - name: Configure Git
         run: |
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GH Action: ${GH_OWNER}"
+          git config --global user.email "${GH_EMAIL}"
 
       - name: Push built packages to apt repository
         run: |
-            git clone https://$PAT@github.com/WHO53/apt.git --depth=1
-            cd apt/packages
-            rm -f $(echo $PKG_NAME | sed 's/\([^ ]*\)/\1*/g')
-            cp /tmp/buildd-results/*.deb .
-            git add -A
-            git commit -m "GitHub Actions: ${{ github.repository }}:${GITHUB_SHA::7}"
-            git push origin main
+          git clone https://$PAT@github.com/${GH_APT_OWNER}/${GH_APT_REPO}.git --depth=1
+          cd ${GH_APT_REPO}
+          rm -vf ${GH_APT_REPO_POOL_DIR}/$(echo $PKG_NAME | sed 's/\([^ ]*\)/\1*/g')
+          cp -v /tmp/buildd-results/*.deb ${GH_APT_REPO_POOL_DIR}/
+          git add -A
+          git commit -S -m "GitHub Actions: (current) main: update package(s)" -m "${PKG_NAME}" -m "${{ github.repository }}:${GITHUB_SHA::7}"
+          git push origin main
