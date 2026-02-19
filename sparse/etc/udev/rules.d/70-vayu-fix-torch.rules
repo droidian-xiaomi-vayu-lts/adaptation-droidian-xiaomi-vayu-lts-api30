@@ -1,0 +1,7 @@
+## Set brightness node permissions for flashlight sysfs workaround.
+## When using the flashlightd 14+z10 version (max-brightness fixes),
+## only one node is required in the sysfs-nodes file (the combined one):
+## '/sys/class/leds/flashlight/brightness'
+#
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="flashlight", RUN+="/bin/sh -c 'chown :android_camera /sys/class/leds/flashlight/brightness'"
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="flashlight", RUN+="/bin/sh -c 'chmod 664 /sys/class/leds/flashlight/brightness'"
